@@ -24,7 +24,9 @@ from optparse import OptionParser
 
 #
 # to make Python2 and Python3 act the same -- how dumb
-# 
+#
+
+
 def random_seed(seed):
     try:
         random.seed(seed, version=1)
@@ -32,8 +34,10 @@ def random_seed(seed):
         random.seed(seed)
     return
 
+
 def random_randint(low, hi):
     return int(low + random.random() * (hi - low + 1))
+
 
 def random_choice(L):
     return L[random_randint(0, len(L)-1)]
@@ -41,6 +45,8 @@ def random_choice(L):
 #
 # class Forker does all the work
 #
+
+
 class Forker:
     def __init__(self, fork_percentage, actions, action_list, show_tree, just_final,
                  leaf_only, local_reparent, print_style, solve):
@@ -69,13 +75,13 @@ class Forker:
 
         # this is for pretty process names...
         self.name_length = 1
-        self.base_names = string.ascii_lowercase + string.ascii_uppercase
+        self.base_names = string.ascii_lowercase + string.ascii_uppercase  # a-z+A-Z
         self.curr_names = self.base_names
         self.curr_index = 1
 
         return
 
-    def grow_names(self):
+    def grow_names(self):   # grow 1 character at atime.
         new_names = []
         for b1 in self.curr_names:
             for b2 in self.base_names:
@@ -87,13 +93,14 @@ class Forker:
     def get_name(self):
         if self.curr_index == len(self.curr_names):
             self.grow_names()
-                
+
         name = self.curr_names[self.curr_index]
         self.curr_index += 1
         return name
 
     def walk(self, p, level, pmask, is_last):
-        print('                               ', end='')
+        print('                               ',
+              end='')  # start from the right
         if self.print_style == 'basic':
             for i in range(level):
                 print('   ', end='')
@@ -113,7 +120,7 @@ class Forker:
         else:
             print('bad style %s' % self.print_style)
             exit(1)
-            
+
         # print stuff before node
         if level > 0:
             # main printing
@@ -130,7 +137,7 @@ class Forker:
                 else:
                     print('%s%s%s ' % (chars[2], chars[1], chars[1]), end='')
             else:
-                # '___' 
+                # '___'
                 print(' %s%s%s ' % (chars[1], chars[1], chars[1]), end='')
 
         # print node
@@ -150,15 +157,16 @@ class Forker:
 
     def print_tree(self):
         return self.walk(self.root_name, 0, {}, False)
-        
+
     def do_fork(self, p, c):
+        # build part of the tree
         self.process_list.append(c)
         self.children[c] = []
         self.children[p].append(c)
         self.parents[c] = p
         return '%s forks %s' % (p, c)
 
-    def collect_children(self, p):
+    def collect_children(self, p):  # return childs of subtree rooted at p, including p
         if self.children[p] == []:
             return [p]
         else:
@@ -167,6 +175,7 @@ class Forker:
                 L += self.collect_children(c)
             return L
 
+    # remove node from the tree and restructure the process tree.
     def do_exit(self, p):
         # remove the process from the process list
         if p == self.root_name:
@@ -181,7 +190,8 @@ class Forker:
                 self.parents[orphan] = exit_parent
                 self.children[exit_parent].append(orphan)
         else:
-            # should set ALL descendants to be child of ROOT 
+            # should set ALL descendants to be child of ROOT
+            # descendents means all nodes in the subtree of p not just direct childes.
             descendents = self.collect_children(p)
             descendents.remove(p)
             for d in descendents:
@@ -191,41 +201,46 @@ class Forker:
 
         # remove the entry from its parent child list
         self.children[exit_parent].remove(p)
-        self.children[p] = -1 # should never be used again
+        self.children[p] = -1  # should never be used again
         self.parents[p] = -1  # should never be used again
-            
+
         # remove the entry for this proc from children
         return '%s EXITS' % p
 
+    # bad action during the execution of fork process.
     def bad_action(self, action):
         print('bad action (%s), must be X+Y or X- where X and Y are processes' % action)
         exit(1)
         return
 
+    # check if porcess fork/exit action is legal or not.
     def check_legal(self, action):
         if '+' in action:
             tmp = action.split('+')
             if len(tmp) != 2:
                 self.bad_action(action)
-            return [tmp[0], tmp[1]]
+            return [tmp[0], tmp[1]]  # tmp[0] fork and created process tmp[1]
         elif '-' in action:
             tmp = action.split('-')
             if len(tmp) != 2:
                 self.bad_action(action)
-            return [tmp[0]]
+            return [tmp[0]]   # process we to exit.
         else:
             self.bad_action(action)
-        return 
-    
+        return
+
+    # core work of the simulation
     def run(self):
         print('                           Process Tree:')
-        self.print_tree()
+        self.print_tree()  # just the root
         print('')
 
+        # user defined action list
         if self.action_list != '':
             # use specific action list
             action_list = self.action_list.split(',')
         else:
+            # build random action list
             action_list = []
             actions = 0
             temp_process_list = [self.root_name]
@@ -238,7 +253,8 @@ class Forker:
                     # FORK:: pick random parent, add child to it
                     fork_choice = random_choice(temp_process_list)
                     new_child = self.get_name()
-                    action_list.append('%s+%s' % (fork_choice, new_child))
+                    action_list.append('%s+%s' %
+                                       (fork_choice, new_child))  # action str length = 3
                     temp_process_list.append(new_child)
                 else:
                     # EXIT:: pick random child, remove it
@@ -247,12 +263,15 @@ class Forker:
                     if exit_choice == self.root_name:
                         continue
                     temp_process_list.remove(exit_choice)
+                    # action str length = 2
                     action_list.append('%s-' % exit_choice)
                 actions += 1
+        # end of building random action list
 
         for a in action_list:
+            # convert the action into array of processes
             tmp = self.check_legal(a)
-            if len(tmp) == 2:
+            if len(tmp) == 2:  # fork action
                 fork_choice, new_child = tmp[0], tmp[1]
                 if fork_choice not in self.process_list:
                     self.bad_action(a)
@@ -261,11 +280,12 @@ class Forker:
                 exit_choice = tmp[0]
                 if exit_choice not in self.process_list:
                     self.bad_action(a)
+                # policy to exist processes nodes only
                 if self.leaf_only and len(self.children[exit_choice]) > 0:
                     action = '%s EXITS (failed: has children)' % exit_choice
                 else:
                     action = self.do_exit(exit_choice)
-            
+
             # if we got here, we actually did an action...
             if self.show_tree:
                 # SHOW TREES (guess actions)
@@ -274,7 +294,7 @@ class Forker:
                 else:
                     print('Action?')
                 # print('Process Tree:')
-                if not self.just_final:
+                if not self.just_final:  # print current representation of the tree
                     self.print_tree()
             else:
                 # SHOW ACTIONS (guess tree)
@@ -298,7 +318,7 @@ class Forker:
                     print('')
                 else:
                     print('\n                        Final Process Tree?\n')
-            
+
         return
 
 
@@ -307,16 +327,26 @@ class Forker:
 #
 
 parser = OptionParser()
-parser.add_option('-s', '--seed', default=-1, help='the random seed', action='store', type='int', dest='seed')
-parser.add_option('-f', '--forks', default=0.7, help='percent of actions that are forks (not exits)', action='store', type='float', dest='fork_percentage')
-parser.add_option('-A', '--action_list', default='', help='action list, instead of randomly generated ones (format: a+b,b+c,b- means a fork b, b fork c, b exit)', action='store', type='string', dest='action_list')
-parser.add_option('-a', '--actions', default=5, help='number of forks/exits to do', action='store', type='int', dest='actions')
-parser.add_option('-t', '--show_tree', help='show tree (not actions)', action='store_true', default=False, dest='show_tree')
-parser.add_option('-P', '--print_style', help='tree print style (basic, line1, line2, fancy)', action='store', type='string', default='fancy', dest='print_style')
-parser.add_option('-F', '--final_only', help='just show final state', action='store_true', default=False, dest='just_final')
-parser.add_option('-L', '--leaf_only', help='only leaf processes exit', action='store_true', default=False, dest='leaf_only')
-parser.add_option('-R', '--local_reparent', help='reparent to local parent', action='store_true', default=False, dest='local_reparent')
-parser.add_option('-c', '--compute', help='compute answers for me', action='store_true', default=False, dest='solve')
+parser.add_option('-s', '--seed', default=-1, help='the random seed',
+                  action='store', type='int', dest='seed')
+parser.add_option('-f', '--forks', default=0.7, help='percent of actions that are forks (not exits)',
+                  action='store', type='float', dest='fork_percentage')
+parser.add_option('-A', '--action_list', default='', help='action list, instead of randomly generated ones (format: a+b,b+c,b- means a fork b, b fork c, b exit)',
+                  action='store', type='string', dest='action_list')
+parser.add_option('-a', '--actions', default=5, help='number of forks/exits to do',
+                  action='store', type='int', dest='actions')
+parser.add_option('-t', '--show_tree', help='show tree (not actions)',
+                  action='store_true', default=False, dest='show_tree')
+parser.add_option('-P', '--print_style', help='tree print style (basic, line1, line2, fancy)',
+                  action='store', type='string', default='fancy', dest='print_style')
+parser.add_option('-F', '--final_only', help='just show final state',
+                  action='store_true', default=False, dest='just_final')
+parser.add_option('-L', '--leaf_only', help='only leaf processes exit',
+                  action='store_true', default=False, dest='leaf_only')
+parser.add_option('-R', '--local_reparent', help='reparent to local parent',
+                  action='store_true', default=False, dest='local_reparent')
+parser.add_option('-c', '--compute', help='compute answers for me',
+                  action='store_true', default=False, dest='solve')
 
 (options, args) = parser.parse_args()
 
@@ -340,7 +370,6 @@ print('ARG print_style', options.print_style)
 print('ARG solve', options.solve)
 print('')
 
-f = Forker(options.fork_percentage, options.actions, options.action_list, options.show_tree, options.just_final, options.leaf_only, options.local_reparent, options.print_style, options.solve)
+f = Forker(options.fork_percentage, options.actions, options.action_list, options.show_tree,
+           options.just_final, options.leaf_only, options.local_reparent, options.print_style, options.solve)
 f.run()
-
-
