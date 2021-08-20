@@ -24,8 +24,8 @@ IO_RUN_IMMEDIATE = 'IO_RUN_IMMEDIATE'
 # process states
 STATE_RUNNING = 'RUNNING'
 STATE_READY = 'READY'
-STATE_DONE = 'DONE'
-STATE_WAIT = 'WAITING'
+STATE_DONE = 'DONE'     # = zombie
+STATE_WAIT = 'WAITING'  # = blocked
 
 # members of process structure
 PROC_CODE = 'code_'
@@ -61,6 +61,8 @@ class scheduler:
     #   c7,i,c1,i
     # which means
     #   compute for 7, then i/o, then compute for 1, then i/o
+    # we can think of it as program instructions (code) but in abstract form.
+    # convert program into process
     def load_program(self, program):
         proc_id = self.new_process()
         for line in program.split(','):
@@ -78,6 +80,7 @@ class scheduler:
                 exit(1)
         return
 
+    # convert program into process
     def load(self, program_description):
         proc_id = self.new_process()
         tmp = program_description.split(':')
@@ -93,10 +96,11 @@ class scheduler:
                 self.proc_info[proc_id][PROC_CODE].append(DO_COMPUTE)
             else:
                 self.proc_info[proc_id][PROC_CODE].append(DO_IO)
-                # add one compute to HANDLE the I/O completion
+                # add one compute to HANDLE the I/O completion => this could be operation of putting the reutrn value in the call stack.
                 self.proc_info[proc_id][PROC_CODE].append(DO_IO_DONE)
         return
 
+    # process state machine
     def move_to_ready(self, expected, pid=-1):
         if pid == -1:
             pid = self.curr_proc
@@ -120,16 +124,18 @@ class scheduler:
         return
 
     def next_proc(self, pid=-1):
-        if pid != -1:
+        if pid != -1: # act on a specific process
             self.curr_proc = pid
             self.move_to_running(STATE_READY)
             return
+
+        # pick the next sequential 'ready' process with wraping around when needed
         for pid in range(self.curr_proc + 1, len(self.proc_info)):
             if self.proc_info[pid][PROC_STATE] == STATE_READY:
                 self.curr_proc = pid
                 self.move_to_running(STATE_READY)
                 return
-        for pid in range(0, self.curr_proc + 1):
+        for pid in range(0, self.curr_proc + 1): # give it a chance to pick the same process again if there is no alternative 
             if self.proc_info[pid][PROC_STATE] == STATE_READY:
                 self.curr_proc = pid
                 self.move_to_running(STATE_READY)
@@ -148,7 +154,7 @@ class scheduler:
     def get_num_active(self):
         num_active = 0
         for pid in range(len(self.proc_info)):
-            if self.proc_info[pid][PROC_STATE] != STATE_DONE:
+            if self.proc_info[pid][PROC_STATE] != STATE_DONE:   # done is zombie process need to be cleaned, maybe os waits for it parent process to take some action.
                 num_active += 1
         return num_active
 
@@ -160,6 +166,7 @@ class scheduler:
                 num_active += 1
         return num_active
 
+    # what is the use of this function
     def get_ios_in_flight(self, current_time):
         num_in_flight = 0
         for pid in range(len(self.proc_info)):
@@ -168,20 +175,22 @@ class scheduler:
                     num_in_flight += 1
         return num_in_flight
 
+    # ?????
     def check_for_switch(self):
         return
-
+    # for formating purpose
     def space(self, num_columns):
         for i in range(num_columns):
             print('%10s' % ' ', end='')
 
     def check_if_done(self):
         if len(self.proc_info[self.curr_proc][PROC_CODE]) == 0:
-            if self.proc_info[self.curr_proc][PROC_STATE] == STATE_RUNNING:
+            if self.proc_info[self.curr_proc][PROC_STATE] == STATE_RUNNING: # also it could be in done state
                 self.move_to_done(STATE_RUNNING)
                 self.next_proc()
         return
 
+    # main scheduler logic
     def run(self):
         clock_tick = 0
 
@@ -189,6 +198,7 @@ class scheduler:
             return
 
         # track outstanding IOs, per process
+        # this structure for scheduling IO interuptes
         self.io_finish_times = {}
         for pid in range(len(self.proc_info)):
             self.io_finish_times[pid] = []
@@ -213,6 +223,7 @@ class scheduler:
             clock_tick += 1
 
             # check for io finish
+            # simulate the part when a device want to communicate that he is finished.
             io_done = False
             for pid in range(len(self.proc_info)):
                 if clock_tick in self.io_finish_times[pid]:
@@ -220,8 +231,8 @@ class scheduler:
                     self.move_to_ready(STATE_WAIT, pid)
                     if self.io_done_behavior == IO_RUN_IMMEDIATE:
                         # IO_RUN_IMMEDIATE
-                        if self.curr_proc != pid:
-                            if self.proc_info[self.curr_proc][PROC_STATE] == STATE_RUNNING:
+                        if self.curr_proc != pid:   # false if we only have one process in the system.
+                            if self.proc_info[self.curr_proc][PROC_STATE] == STATE_RUNNING: # how it could not be !!????
                                 self.move_to_ready(STATE_RUNNING)
                         self.next_proc(pid)
                     else:
@@ -283,6 +294,7 @@ class scheduler:
 # PARSE ARGUMENTS
 #
 
+# value assigned to dest parameter will be a property in options object that we can access
 parser = OptionParser()
 parser.add_option('-s', '--seed', default=0, help='the random seed', action='store', type='int', dest='seed')
 parser.add_option('-P', '--program', default='', help='more specific controls over programs', action='store', type='string', dest='program')
@@ -301,7 +313,8 @@ assert(options.io_done_behavior == IO_RUN_IMMEDIATE or options.io_done_behavior 
 
 s = scheduler(options.process_switch_behavior, options.io_done_behavior, options.io_length)
 
-if options.program != '':
+# load programs and make processes 
+if options.program != '':  # specific instructions
     for p in options.program.split(':'):
         s.load_program(p)
 else:
@@ -311,6 +324,7 @@ else:
 
 assert(options.io_length >= 0)
 
+# trace of events
 if options.solve == False:
     print('Produce a trace of what would happen when you run these processes:')
     for pid in range(s.get_num_processes()):
@@ -332,6 +346,7 @@ if options.solve == False:
     print('')
     exit(0)
 
+# actual simulation
 (cpu_busy, io_busy, clock_tick) = s.run()
 
 if options.print_stats:
