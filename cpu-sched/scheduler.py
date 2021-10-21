@@ -1,11 +1,14 @@
 #! /usr/bin/env python3
 
 from __future__ import print_function
+import operator
 import sys
 from optparse import OptionParser
 import random
 
 # to make Python2 and Python3 act the same -- how dumb
+
+
 def random_seed(seed):
     try:
         random.seed(seed, version=1)
@@ -13,14 +16,23 @@ def random_seed(seed):
         random.seed(seed)
     return
 
-parser = OptionParser()
-parser.add_option("-s", "--seed", default=0, help="the random seed", action="store", type="int", dest="seed")
-parser.add_option("-j", "--jobs", default=3, help="number of jobs in the system", action="store", type="int", dest="jobs")
-parser.add_option("-l", "--jlist", default="", help="instead of random jobs, provide a comma-separated list of run times", action="store", type="string", dest="jlist")
-parser.add_option("-m", "--maxlen", default=10, help="max length of job", action="store", type="int", dest="maxlen")
-parser.add_option("-p", "--policy", default="FIFO", help="sched policy to use: SJF, FIFO, RR", action="store", type="string", dest="policy")
-parser.add_option("-q", "--quantum", help="length of time slice for RR policy", default=1, action="store", type="int", dest="quantum")
-parser.add_option("-c", help="compute answers for me", action="store_true", default=False, dest="solve")
+
+parser = OptionParser()  # get instace os the parser
+# configure the parser
+parser.add_option("-s", "--seed", default=0, help="the random seed",
+                  action="store", type="int", dest="seed")
+parser.add_option("-j", "--jobs", default=3, help="number of jobs in the system",
+                  action="store", type="int", dest="jobs")
+parser.add_option("-l", "--jlist", default="", help="instead of random jobs, provide a comma-separated list of run times",
+                  action="store", type="string", dest="jlist")
+parser.add_option("-m", "--maxlen", default=10, help="max length of job",
+                  action="store", type="int", dest="maxlen")
+parser.add_option("-p", "--policy", default="FIFO",
+                  help="sched policy to use: SJF, FIFO, RR", action="store", type="string", dest="policy")
+parser.add_option("-q", "--quantum", help="length of time slice for RR policy",
+                  default=1, action="store", type="int", dest="quantum")
+parser.add_option("-c", help="compute answers for me",
+                  action="store_true", default=False, dest="solve")
 
 (options, args) = parser.parse_args()
 
@@ -37,11 +49,10 @@ print('')
 
 print('Here is the job list, with the run time of each job: ')
 
-import operator
 
 joblist = []
 if options.jlist == '':
-    for jobnum in range(0,options.jobs):
+    for jobnum in range(0, options.jobs):
         runtime = int(options.maxlen * random.random()) + 1
         joblist.append([jobnum, runtime])
         print('  Job', jobnum, '( length = ' + str(runtime) + ' )')
@@ -54,49 +65,54 @@ else:
         print('  Job', job[0], '( length = ' + str(job[1]) + ' )')
 print('\n')
 
+
+# each process run to completion
 if options.solve == True:
     print('** Solutions **\n')
     if options.policy == 'SJF':
         joblist = sorted(joblist, key=operator.itemgetter(1))
         options.policy = 'FIFO'
-    
+
     if options.policy == 'FIFO':
         thetime = 0
         print('Execution trace:')
         for job in joblist:
-            print('  [ time %3d ] Run job %d for %.2f secs ( DONE at %.2f )' % (thetime, job[0], job[1], thetime + job[1]))
+            print('  [ time %3d ] Run job %d for %.2f secs ( DONE at %.2f )' % (
+                thetime, job[0], job[1], thetime + job[1]))
             thetime += job[1]
 
         print('\nFinal statistics:')
-        t     = 0.0
+        t = 0.0
         count = 0
         turnaroundSum = 0.0
-        waitSum       = 0.0
-        responseSum   = 0.0
+        waitSum = 0.0
+        responseSum = 0.0
         for tmp in joblist:
-            jobnum  = tmp[0]
+            jobnum = tmp[0]
             runtime = tmp[1]
-            
-            response   = t
+
+            response = t  # time of first run
             turnaround = t + runtime
-            wait       = t
-            print('  Job %3d -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f' % (jobnum, response, turnaround, wait))
-            responseSum   += response
+            wait = t
+            print('  Job %3d -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f' %
+                  (jobnum, response, turnaround, wait))
+            responseSum += response
             turnaroundSum += turnaround
-            waitSum       += wait
+            waitSum += wait
             t += runtime
             count = count + 1
-        print('\n  Average -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f\n' % (responseSum/count, turnaroundSum/count, waitSum/count))
-                     
+        print('\n  Average -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f\n' %
+              (responseSum/count, turnaroundSum/count, waitSum/count))
+
     if options.policy == 'RR':
         print('Execution trace:')
         turnaround = {}
         response = {}
-        lastran = {}
+        lastran = {}  # used to calculate wait time
         wait = {}
-        quantum  = float(options.quantum)
+        quantum = float(options.quantum)
         jobcount = len(joblist)
-        for i in range(0,jobcount):
+        for i in range(0, jobcount):
             lastran[i] = 0.0
             wait[i] = 0.0
             turnaround[i] = 0.0
@@ -106,42 +122,50 @@ if options.solve == True:
         for e in joblist:
             runlist.append(e)
 
-        thetime  = 0.0
+        thetime = 0.0
         while jobcount > 0:
             job = runlist.pop(0)
-            jobnum  = job[0]
+            jobnum = job[0]
             runtime = float(job[1])
-            if response[jobnum] == -1:
+            if response[jobnum] == -1:  # this is the first time for this process to run
                 response[jobnum] = thetime
             currwait = thetime - lastran[jobnum]
-            wait[jobnum] += currwait
+            wait[jobnum] += currwait  # total wait time for this process
+
+            # simulate running the process
             if runtime > quantum:
                 runtime -= quantum
                 ranfor = quantum
-                print('  [ time %3d ] Run job %3d for %.2f secs' % (thetime, jobnum, ranfor))
+                print('  [ time %3d ] Run job %3d for %.2f secs' %
+                      (thetime, jobnum, ranfor))
+                # RR queue
+                # put the process at the end of the queue
                 runlist.append([jobnum, runtime])
-            else:
-                ranfor = runtime;
-                print('  [ time %3d ] Run job %3d for %.2f secs ( DONE at %.2f )' % (thetime, jobnum, ranfor, thetime + ranfor))
+            else:  # here process will give up control of the cpu
+                ranfor = runtime
+                print('  [ time %3d ] Run job %3d for %.2f secs ( DONE at %.2f )' % (
+                    thetime, jobnum, ranfor, thetime + ranfor))
                 turnaround[jobnum] = thetime + ranfor
                 jobcount -= 1
-            thetime += ranfor
+            thetime += ranfor  # ran for is <= quantum
             lastran[jobnum] = thetime
 
         print('\nFinal statistics:')
         turnaroundSum = 0.0
-        waitSum       = 0.0
-        responseSum   = 0.0
-        for i in range(0,len(joblist)):
+        waitSum = 0.0
+        responseSum = 0.0
+        for i in range(0, len(joblist)):
             turnaroundSum += turnaround[i]
             responseSum += response[i]
             waitSum += wait[i]
-            print('  Job %3d -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f' % (i, response[i], turnaround[i], wait[i]))
+            print('  Job %3d -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f' %
+                  (i, response[i], turnaround[i], wait[i]))
         count = len(joblist)
-        
-        print('\n  Average -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f\n' % (responseSum/count, turnaroundSum/count, waitSum/count))
 
-    if options.policy != 'FIFO' and options.policy != 'SJF' and options.policy != 'RR': 
+        print('\n  Average -- Response: %3.2f  Turnaround %3.2f  Wait %3.2f\n' %
+              (responseSum/count, turnaroundSum/count, waitSum/count))
+
+    if options.policy != 'FIFO' and options.policy != 'SJF' and options.policy != 'RR':
         print('Error: Policy', options.policy, 'is not available.')
         sys.exit(0)
 else:
